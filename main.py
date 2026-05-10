@@ -69,6 +69,15 @@ enemies = [
 ]
 
 # =========================================================
+# HEALTH PACKS
+# =========================================================
+
+healthpacks = [
+    [1.5, 7],
+    [9, 3.5],
+]
+
+# =========================================================
 # COLORS
 # =========================================================
 
@@ -100,6 +109,13 @@ enemy_img.fill(RED)
 # ---------------------------------------------------------
 
 # =========================================================
+# HEALTH PACK SPRITE
+# =========================================================
+
+healthpack_img = pygame.Surface((64, 64))
+healthpack_img.fill(GREEN)
+
+# =========================================================
 # WALL TEXTURE PLACEHOLDER
 # =========================================================
 
@@ -123,6 +139,46 @@ def distance(x1, y1, x2, y2):
     dx = x2 - x1
     dy = y2 - y1
     return math.sqrt(dx * dx + dy * dy)
+
+# =========================================================
+# GENERIC SPRITE DRAWING
+# =========================================================
+
+def draw_sprite(sprite, obj_x, obj_y):
+
+    dx = obj_x - player_x
+    dy = obj_y - player_y
+
+    dist = math.sqrt(dx * dx + dy * dy)
+
+    angle = math.atan2(dy, dx)
+    angle_diff = angle - player_angle
+
+    while angle_diff > math.pi:
+        angle_diff -= 2 * math.pi
+
+    while angle_diff < -math.pi:
+        angle_diff += 2 * math.pi
+ 
+
+    if abs(angle_diff) < HALF_FOV:
+
+        screen_x = (angle_diff + HALF_FOV) / FOV * WIDTH
+
+        size = HEIGHT / (dist + 0.0001)
+
+        scaled = pygame.transform.scale(
+            sprite,
+            (int(size), int(size))
+        )
+
+        draw_x = int(screen_x - size / 2)
+        draw_y = int(HEIGHT / 2 - size / 2)
+
+        
+        ray_index = int(screen_x / (WIDTH / NUM_RAYS))
+        if 0 <= ray_index < NUM_RAYS and dist < z_buffer[ray_index]:
+            screen.blit(scaled, (draw_x, draw_y))
 
 # =========================================================
 # RAYCASTING
@@ -150,16 +206,11 @@ def cast_rays():
 
                 brightness = 255 / (1 + corrected_depth * corrected_depth * 0.1)
                 wall_color = (brightness, brightness, brightness)
-
+                ray_x = int(ray * (WIDTH / NUM_RAYS))
                 pygame.draw.rect(
                     screen,
                     wall_color,
-                    (
-                        ray * (WIDTH // NUM_RAYS),
-                        HEIGHT // 2 - wall_height // 2,
-                        WIDTH // NUM_RAYS + 1,
-                        wall_height
-                    )
+                    (ray_x, HEIGHT // 2 - wall_height // 2, int(WIDTH / NUM_RAYS) + 1, wall_height)
                 )
 
                 # Save depth for this ray
@@ -234,6 +285,20 @@ def draw_enemies():
         ray_index = int(screen_x / (WIDTH / NUM_RAYS))
         if 0 <= ray_index < NUM_RAYS and dist < z_buffer[ray_index]:
             screen.blit(enemy_scaled, (draw_x, draw_y))
+            
+# =========================================================
+# DRAW HEALTH PACKS
+# =========================================================
+
+def draw_healthpacks():
+
+    for hx, hy in healthpacks:
+
+        draw_sprite(
+            healthpack_img,
+            hx,
+            hy
+    )
 
 
 # =========================================================
@@ -288,6 +353,37 @@ def update_enemies():
                 player_health = 0
 
 # =========================================================
+# COLLECT HEALTH PACKS
+# =========================================================
+
+def update_healthpacks():
+
+    global player_health
+
+    for pack in healthpacks[:]:
+
+        hx, hy = pack
+
+        dist = distance(
+            player_x,
+            player_y,
+            hx,
+            hy
+        )
+
+        if dist < 0.5:
+
+            player_health += 25
+
+            # LIMIT MAX HEALTH
+            if player_health > 100:
+                player_health = 100
+
+            # REMOVE PICKUP
+            healthpacks.remove(pack)
+
+
+# =========================================================
 # HEALTH BAR
 # =========================================================
 
@@ -297,7 +393,7 @@ def draw_health_bar():
     pygame.draw.rect(
         screen,
         DARK_RED,
-        (20, 20, 200, 25)
+        (280, 20, 200, 25)
     )
 
     # Current HP
@@ -306,17 +402,17 @@ def draw_health_bar():
     pygame.draw.rect(
         screen,
         RED,
-        (20, 20, health_width, 25)
+        (280, 20, health_width, 25)
     )
 
     # Text
     hp_text = font.render(
         f"HP: {int(player_health)}",
         True,
-        WHITE
+        RED
     )
 
-    screen.blit(hp_text, (20, 55))
+    screen.blit(hp_text, (490, 20))
 
 # =========================================================
 # CROSSHAIR
@@ -370,6 +466,20 @@ def draw_minimap():
                     tile_size
                 )
             )
+
+    # DRAW HEALTH PACKS
+    for hx, hy in healthpacks:
+
+        pygame.draw.circle(
+            screen,
+            GREEN,
+            (
+                int(hx * tile_size),
+                int(hy * tile_size)
+            ),
+            4
+        )
+
 
     # Draw enemies
     for ex, ey in enemies:
@@ -473,6 +583,8 @@ while running:
     # =====================================================
 
     update_enemies()
+    
+    update_healthpacks()
 
     # =====================================================
     # DRAW SKY + FLOOR
@@ -498,6 +610,8 @@ while running:
     # =====================================================
 
     cast_rays()
+    
+    draw_healthpacks()
 
     draw_enemies()
 
